@@ -65,7 +65,7 @@ async function exportStyledPacesetter(tabs, filename){
    });
    if(band!==undefined)lastBand=band;
   });
-  ws.autoFilter=name==='餐廳用電排名'?{from:'A1',to:ws.getRow(1).lastCell.address}:undefined;
+  if(name==='餐廳用電排名' && keys.length){ws.autoFilter={from:{row:1,column:1},to:{row:records.length+1,column:keys.length}};}
   ws.pageSetup={fitToPage:true,fitToWidth:1,fitToHeight:0,orientation:'landscape'};
  }
  const bytes=await wb.xlsx.writeBuffer();const url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
