@@ -35,11 +35,33 @@ function renderPace(){paceDetails=calcPace();$('paceRows').innerHTML=paceDetails
 function calcAnomaly(){let year=+$('anomalyYear').value,month=+$('anomalyMonth').value,threshold=+$('anomalyThreshold').value, m=monthMap();return storeList().filter(active).map(st=>{let cur=m.get(`${st.store_code}|${year}|${month}`),prev=m.get(`${st.store_code}|${year-1}|${month}`),v=cur?.daily_avg_kwh,p=prev?.daily_avg_kwh,change=v!=null&&p!=null&&Number(p)>0?(Number(v)/Number(p)-1)*100:null;return {...st,now:v==null?null:Number(v),prev:p==null?null:Number(p),change,flag:change==null?'無同比資料':change>=threshold?'用電增加':'正常'}}).filter(x=>x.now!=null).sort((a,b)=>(b.change??-999)-(a.change??-999))}
 function renderAnomaly(){anomalyDetails=calcAnomaly();$('anomalyRows').innerHTML=anomalyDetails.map(x=>`<tr><td>${h(x.store_code+' '+x.store_name)}</td><td>${h(x.region)}</td><td>${h(x.ac)}</td><td>${h(x.band)}</td><td>${x.now.toFixed(0)}</td><td>${x.prev?.toFixed(0)??'N/A'}</td><td>${x.change==null?'N/A':x.change.toFixed(2)+'%'}</td><td>${x.flag}</td></tr>`).join('')}
 function exportXlsx(rows,name){if(!rows.length){alert('目前沒有可匯出的資料');return}let ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'報表');XLSX.writeFile(wb,name)}
-function sheet(rows,name,percentCols=[]){let ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=Object.keys(rows[0]||{}).map(k=>({wch:Math.max(12,Math.min(28,k.length*2+7))}));ws['!autofilter']={ref:ws['!ref']};let headers=Object.keys(rows[0]||{});percentCols.forEach(k=>{let col=headers.indexOf(k);if(col<0)return;for(let r=2;r<=rows.length+1;r++){let cell=ws[XLSX.utils.encode_cell({r:r-1,c:col})];if(cell&&typeof cell.v==='number')cell.z='0.00%'}});for(let row=2;row<=rows.length+1;row++)for(let col=0;col<headers.length;col++){let cell=ws[XLSX.utils.encode_cell({r:row-1,c:col})];if(cell&&typeof cell.v==='number'&&!percentCols.includes(headers[col]))cell.z='#,##0';}return ws}
+function sheet(rows,name,percentCols=[]){let ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=Object.keys(rows[0]||{}).map(k=>({wch:Math.max(14,Math.min(38,k.length*2+10))}));ws['!autofilter']={ref:ws['!ref']};ws['!freeze']={xSplit:0,ySplit:1};ws['!rows']=[{hpt:28}];let headers=Object.keys(rows[0]||{});percentCols.forEach(k=>{let col=headers.indexOf(k);if(col<0)return;for(let r=2;r<=rows.length+1;r++){let cell=ws[XLSX.utils.encode_cell({r:r-1,c:col})];if(cell&&typeof cell.v==='number')cell.z='0.00%'}});for(let row=2;row<=rows.length+1;row++)for(let col=0;col<headers.length;col++){let cell=ws[XLSX.utils.encode_cell({r:row-1,c:col})];if(cell&&typeof cell.v==='number'&&!percentCols.includes(headers[col]))cell.z='#,##0.00';}for(let c=0;c<headers.length;c++){let cell=ws[XLSX.utils.encode_cell({r:0,c})];if(cell)cell.s={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'C41230'}},alignment:{horizontal:'center',vertical:'center'}}}for(let r=1;r<=rows.length;r++){let last=rows[r-1]?.Band==='合計';for(let c=0;c<headers.length;c++){let cell=ws[XLSX.utils.encode_cell({r,c})];if(cell)cell.s={font:{bold:last,color:{rgb:last?'FFFFFF':'202A35'}},fill:{fgColor:{rgb:last?'263746':r%2===0?'F1F5F9':'FFFFFF'}},alignment:{vertical:'center'}}}}return ws}
 function workbook(tabs,filename){let wb=XLSX.utils.book_new();for(let [name,rows,percents] of tabs){XLSX.utils.book_append_sheet(wb,sheet(rows,name,percents||[]),name.slice(0,31))}XLSX.writeFile(wb,filename)}
 $('masterExport').onclick=()=>workbook([['最新餐廳資料',storeList().map(x=>({區域:x.region,AC:x.ac,Band:x.band,餐廳代號:x.store_code,餐廳名稱:x.store_name,營運狀態:x.status}))]],'餐廳基本資料.xlsx');
 $('trendExport').onclick=()=>{let codes=new Set(filteredStores().map(x=>x.store_code)),stores=new Map(storeList().map(x=>[x.store_code,x]));let detail=monthly.filter(x=>codes.has(x.store_code)).map(x=>{let st=stores.get(x.store_code)||{};return {區域:st.region,AC:st.ac,Band:st.band,餐廳代號:x.store_code,餐廳名稱:st.store_name,年度:x.year,月份:x.month,平均每日度數:x.daily_avg_kwh??''}});workbook([['每月趨勢彙總',lastTrendRows.map(x=>({年度:x.year,月份:x.month,有效餐廳:x.n,平均每日度數:x.avg}))],['餐廳月份明細',detail]],'用電趨勢.xlsx')};
-$('paceExport').onclick=()=>{let detail=paceDetails.flatMap(p=>p.items.map((x,i)=>({Band:p.band,區域:x.region,AC:x.ac,餐廳代號:x.store_code,餐廳名稱:x.store_name,每日平均度數:x.kwh,排序:i+1,採計:p.chosen.includes(x)?'是':'否',排除最省電:p.excluded===x?'是':'否',Band基準:p.avg??'',有效家數:p.items.length,採計家數:p.count})));let summary=paceDetails.map(p=>({Band:p.band,有效餐廳:p.items.length,排除餐廳:p.excluded?.store_name||'',採計家數:p.count,基準度數:p.avg??''}));let compare=detail.map(x=>({Band:x.Band,區域:x.區域,AC:x.AC,餐廳代號:x.餐廳代號,餐廳名稱:x.餐廳名稱,實際度數:x.每日平均度數,基準度數:x.Band基準,差異度數:x.Band基準===''?'':x.每日平均度數-x.Band基準,差異百分比:x.Band基準?x.每日平均度數/x.Band基準-1:''}));workbook([['Pacesetter總覽',summary],['餐廳用電排名',compare,['差異百分比']],['基準計算明細',detail]],`Pacesetter_${$('paceYear').value}M${$('paceMonth').value}.xlsx`)};
+$('paceExport').onclick=()=>{
+ const all=paceDetails.flatMap(p=>p.items.map((x,i)=>({p,x,groupRank:i+1})));
+ const national=[...all].sort((a,b)=>a.x.kwh-b.x.kwh||a.x.store_code.localeCompare(b.x.store_code));
+ const nationalRank=new Map(national.map((r,i)=>[r.x.store_code,i+1]));
+ const summary=paceDetails.map(p=>({Band:p.band,餐廳數:p.items.length,採計家數:p.count,群組平均度數:p.avg??''}));
+ const totalStores=summary.reduce((n,r)=>n+r.餐廳數,0),totalChosen=summary.reduce((n,r)=>n+r.採計家數,0);
+ // 合計平均採各 Band 採計餐廳的度數加權，避免將不同群組平均直接相加。
+ const weighted=totalChosen?paceDetails.reduce((n,p)=>n+(p.avg??0)*p.count,0)/totalChosen:'';
+ summary.push({Band:'合計',餐廳數:totalStores,採計家數:totalChosen,群組平均度數:weighted});
+ const compare=all.map(({p,x,groupRank})=>({Band:p.band,群組排名:groupRank,全國排名:nationalRank.get(x.store_code),區域:x.region,AC:x.ac,餐廳代號:x.store_code,餐廳名稱:x.store_name,實際度數:x.kwh,群組平均度數:p.avg??'',差異度數:p.avg==null?'':x.kwh-p.avg,差異百分比:p.avg?x.kwh/p.avg-1:''}));
+ const notes=[
+ {項目:'資料範圍',計算邏輯:'選定年月內，僅納入營運中、有 Band、且每日平均度數為有效非負數的餐廳。'},
+ {項目:'餐廳數',計算邏輯:'各 Band 符合條件的餐廳總數；合計為各 Band 餐廳數加總。'},
+ {項目:'採計家數',計算邏輯:'各 Band 先排除每日用電最低的 1 家，再取剩餘餐廳中最低用電的前 50%，不足整數無條件進位。少於 2 家不計算基準。'},
+ {項目:'群組平均度數',計算邏輯:'各 Band 採計餐廳的每日平均度數算術平均；總覽合計為各 Band 採計家數加權的平均值。'},
+ {項目:'群組排名',計算邏輯:'同 Band 依每日平均用電度數由低至高排列；同度數以餐廳代號排序。'},
+ {項目:'全國排名',計算邏輯:'全部有效餐廳依每日平均用電度數由低至高排列；同度數以餐廳代號排序。'},
+ {項目:'差異度數',計算邏輯:'實際度數－所屬 Band 群組平均度數。'},
+ {項目:'差異百分比',計算邏輯:'實際度數 ÷ 所屬 Band 群組平均度數－1；負值表示低於群組平均。'},
+ {項目:'顯示方式',計算邏輯:'度數顯示兩位小數，百分比顯示兩位小數；計算保留原始精度。'}
+ ];
+ workbook([['Pacesetter總覽',summary],['餐廳用電排名',compare,['差異百分比']],['計算邏輯說明',notes]],`Pacesetter_${$('paceYear').value}M${$('paceMonth').value}.xlsx`)
+};
 $('anomalyExport').onclick=()=>workbook([['用電異常',anomalyDetails.map(x=>({餐廳代號:x.store_code,餐廳名稱:x.store_name,區域:x.region,AC:x.ac,Band:x.band,今年每日度數:x.now,去年每日度數:x.prev??'',年增率:x.change==null?'':x.change/100,判斷:x.flag})),['年增率']]],`用電異常_${$('anomalyYear').value}M${$('anomalyMonth').value}.xlsx`);
 ['paceYear','paceMonth'].forEach(id=>$(id).onchange=()=>loadVisible());['anomalyYear','anomalyMonth'].forEach(id=>$(id).onchange=()=>loadVisible());$('anomalyThreshold').onchange=renderAnomaly;
 function render(){filterUI();periodOptions();renderTrend();renderPace();renderAnomaly()}
